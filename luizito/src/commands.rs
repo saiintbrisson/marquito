@@ -1,6 +1,7 @@
 use std::{path::PathBuf, io};
 use futures::{stream::{Stream, FuturesUnordered, StreamExt}};
 use reqwest::Client;
+use bytes::Bytes;
 
 
 pub async fn get_files(files: Vec<PathBuf>, _save_files: bool) -> io::Result<()> {
