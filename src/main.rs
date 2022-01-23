@@ -64,13 +64,21 @@ struct Response {
 }
 
 async fn generate_response(request: Request) -> Response {
-    let Request { method, .. } = request;
+    use http::method::Method;
 
-    match method {
-        Method::Get => {}
-        Method::Post => {}
+    fn skip_one_char(text: &str) -> &str {
+        let mut chars = text.chars();
+        let _ = chars.next();
+        chars.as_str()
     }
-    todo!()
+
+    let uri = skip_one_char(request.uri().path()).to_owned();
+
+    match request.method().to_owned() {
+        Method::GET => response::get_response(uri).await,
+        Method::POST => response::post_response(uri, request.into_body()).await,
+        _ => unreachable!("Unsupported method"),
+}
 }
 
 async fn recv(socket: &mut TcpStream) -> Result<Request, RequestError> {
