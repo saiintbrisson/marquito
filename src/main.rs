@@ -1,13 +1,19 @@
-use std::{collections::HashMap, io, net::SocketAddr, process, str::FromStr};
+mod error;
+mod request;
+mod response;
 
-use bytes::{Buf, Bytes, BytesMut};
-use error::RequestError;
+use std::{io, net::SocketAddr, process, str::from_utf8, fmt::Write as _};
+
+use bytes::{Buf, BytesMut};
+use error::{RequestError};
+use http::header::CONTENT_LENGTH;
+use memchr::memmem;
+use request::Request;
+use response::Response;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
-
-mod error;
 
 #[tokio::main]
 async fn main() {
@@ -44,23 +50,29 @@ impl Server {
     }
 }
 
+#[tracing::instrument(skip(socket))]
 async fn handle_request(mut socket: TcpStream, addr: SocketAddr) {
-    let request = recv(&mut socket)
-        .await
-        .unwrap_or_else(|_err| panic!("eitakkk"));
+    let request = recv(&mut socket).await.unwrap_or_else(|_err| todo!());
+    tracing::debug!("received request");
 
-    socket
-        .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 20\r\n\r\nbom dia kkkkkkkkkkkk")
-        .await
-        .unwrap();
-
-    let response = generate_response(request);
-    // send_response(response);
+    let response = generate_response(request).await;
+    send_response(&mut socket, response).await;
 }
 
-struct Response {
-    code: u16,
-    headers: Headers,
+async fn send_response(socket: &mut TcpStream, response: Response) -> io::Result<()> {
+    let mut buf = BytesMut::with_capacity(1024);
+
+    write!(buf, "{:?} {:?}\r\n", response.version(), response.status()).unwrap();
+    for (key, value) in response.headers() {
+        write!(buf, "{}: {}\r\n", key, value.to_str().unwrap()).unwrap();
+    }
+    write!(buf, "\r\n").unwrap();
+
+    if let Some(body) = response.body() {
+        buf.extend_from_slice(body.as_slice());
+    }
+
+    socket.write_all_buf(&mut buf).await
 }
 
 async fn generate_response(request: Request) -> Response {
@@ -78,8 +90,11 @@ async fn generate_response(request: Request) -> Response {
         Method::GET => response::get_response(uri).await,
         Method::POST => response::post_response(uri, request.into_body()).await,
         _ => unreachable!("Unsupported method"),
+    }
 }
-}
+
+const LINE_DELIMITER: &[u8] = b"\r\n";
+const REQUEST_DELIMITER: &[u8] = b"\r\n\r\n";
 
 async fn recv(socket: &mut TcpStream) -> Result<Request, RequestError> {
     let mut buf = BytesMut::with_capacity(1024);
@@ -87,101 +102,33 @@ async fn recv(socket: &mut TcpStream) -> Result<Request, RequestError> {
     let mut position;
     loop {
         socket.read_buf(&mut buf).await?;
-
-        position = buf.windows(4).position(|x| x == REQUEST_DELIMITER);
-
+        
+        position = memmem::find(&buf, REQUEST_DELIMITER);
         if position.is_some() {
             break;
         }
     }
 
-    let request_header = buf.split_to(position.unwrap()).freeze();
-    let mut request = Request::from(&request_header[..]);
+    let request = buf.split_to(position.unwrap()).freeze();
+    let request = request::from_slice(&request)?;
     buf.advance(REQUEST_DELIMITER.len());
 
-    if let Some(content_lenght) = request.headers.get("Content-Lenght") {
-        let content_lenght = content_lenght.parse::<usize>().unwrap();
+    let content_length = request
+        .headers_ref()
+        .and_then(|map| map.get(CONTENT_LENGTH));
 
-        while buf.len() < content_lenght {
-            socket.read_buf(&mut buf).await?;
+    if let Some(content_lenght) = content_length {
+        let content_lenght = from_utf8(content_lenght.as_bytes())?.parse::<usize>().unwrap();
+
+        if buf.len() < content_lenght {
+            buf.resize(content_lenght, 0);
+            socket.read_exact(&mut buf).await?;
         }
 
-        request.body = Some(buf.freeze());
-    }
-
-    Ok(request)
-}
-
-type Headers = HashMap<String, String>;
-
-#[derive(Debug)]
-pub struct Request {
-    method: Method,
-    path: String,
-    version: String,
-    headers: Headers,
-    body: Option<Bytes>,
-}
-
-impl Request {
-    pub fn from(slice: &[u8]) -> Self {
-        let request_line_length = slice.windows(2).position(|x| x == LINE_DELIMITER).unwrap();
-
-        let str = std::str::from_utf8(slice).unwrap();
-
-        //request line = "METHOD PATH HTTP/VERSION\r\n"
-        let (request_line, rest) = str.split_at(request_line_length);
-        let mut request_line = request_line.trim_end().splitn(3, |x| x == ' ');
-        let method = request_line.next().unwrap();
-        let path = request_line.next().unwrap();
-        let version = request_line.next().unwrap();
-
-        let rest = rest.trim();
-        // header = "Name: Value\r\n"
-
-        let mut map = HashMap::<String, String>::new();
-        for line in rest.lines() {
-            let (key, value) = line.split_once(":").unwrap();
-            map.insert(key.into(), value.trim_start().into());
-        }
-
-        Request {
-            method: method.parse().unwrap(),
-            path: path.to_string(),
-            version: version.to_string(),
-            headers: map,
-            body: None,
-        }
+        request
+            .body(Some(buf.freeze()))
+            .map_err(RequestError::HttpError)
+    } else {
+        request.body(None).map_err(RequestError::HttpError)
     }
 }
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum Method {
-    Get,
-    Post,
-}
-
-impl FromStr for Method {
-    type Err = error::RequestError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.trim() {
-            "GET" => Ok(Self::Get),
-            "POST" => Ok(Self::Post),
-            _ => Err(error::RequestError::InvalidMethod(s.to_string())),
-        }
-    }
-}
-
-// GET / HTTP/1.1\r\n
-// Host: localhost:8080\r\n
-// \r\n
-
-// GET / HTTP/1.1\r\n
-// Content-Length: 12\r\n
-// Host: localhost:8080\r\n
-// \r\n
-// Hello World!
-
-const LINE_DELIMITER: &[u8] = b"\r\n";
-const REQUEST_DELIMITER: &[u8] = b"\r\n\r\n";
