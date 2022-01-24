@@ -12,18 +12,27 @@ use crate::server::{response::IntoResponse, Request, Response};
 pub async fn handle(request: Request) -> Response {
     use http::method::Method;
 
-    fn skip_one_char(text: &str) -> &str {
-        let mut chars = text.chars();
-        let _ = chars.next();
-        chars.as_str()
+    let uri = request.uri().path();
+
+    if uri.len() < 2 {
+        return (StatusCode::BAD_REQUEST, "Missing file name").into_response();
     }
 
-    let uri = skip_one_char(request.uri().path()).to_owned();
+    if !uri.starts_with('/') {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    let uri = &uri[1..];
+    if memchr::memchr2(b'/', b'\\', uri.as_bytes()).is_some() {
+        return (StatusCode::BAD_REQUEST, "File name cannot contain '/' nor '\\'").into_response();
+    }
+
+    let uri = Path::new(crate::FILES_STORAGE_DIRECTORY).join(uri);
 
     match request.method().to_owned() {
         Method::GET => get_response(uri).await,
         Method::POST => post_response(uri, request.into_body()).await,
-        _ => unreachable!("Unsupported method"),
+        _ => (StatusCode::NOT_FOUND, "Only GET and POST methods are accepted").into_response(),
     }
 }
 
@@ -31,8 +40,8 @@ async fn get_response(path: impl AsRef<Path>) -> Response {
     let file_contents = fs::read(path.as_ref()).await;
 
     match file_contents {
-        Ok(contents) => (StatusCode::OK, contents).into_responese(),
-        Err(_) => StatusCode::NOT_FOUND.into_responese(),
+        Ok(contents) => (StatusCode::OK, contents).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -40,7 +49,7 @@ async fn post_response(path: impl AsRef<Path>, file_contents: Option<Bytes>) -> 
     let file_contents = match file_contents {
         Some(contents) => contents,
         None => {
-            return (StatusCode::BAD_REQUEST, "empty message").into_responese();
+            return (StatusCode::BAD_REQUEST, "Empty message").into_response();
         }
     };
 
@@ -50,7 +59,7 @@ async fn post_response(path: impl AsRef<Path>, file_contents: Option<Bytes>) -> 
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
-    .into_responese()
+    .into_response()
 }
 
 async fn write_to_file(path: &Path, file_contents: &[u8]) -> io::Result<()> {
