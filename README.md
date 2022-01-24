@@ -17,7 +17,7 @@ cargo install --path ./marquito
 cargo install --path ./luizito
 ```
 
-Running the server is as easy as running `marquito` in the terminal:
+Running the server is as easy as running `marquito` on the terminal:
 ```sh
 marquito
 INFO marquito::server: server is running addr=127.0.0.1:23400
