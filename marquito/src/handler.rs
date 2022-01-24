@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use bytes::Bytes;
 use http::StatusCode;
@@ -7,9 +7,12 @@ use tokio::{
     io::{self, AsyncWriteExt},
 };
 
-use crate::server::{response::IntoResponse, Request, Response};
+use crate::{
+    server::{response::IntoResponse, Request, Response},
+    AppState,
+};
 
-pub async fn handle(request: Request) -> Response {
+pub async fn handle(request: Request, app_state: Arc<AppState>) -> Response {
     use http::method::Method;
 
     let uri = request.uri().path();
@@ -24,15 +27,25 @@ pub async fn handle(request: Request) -> Response {
 
     let uri = &uri[1..];
     if memchr::memchr2(b'/', b'\\', uri.as_bytes()).is_some() {
-        return (StatusCode::BAD_REQUEST, "File name cannot contain '/' nor '\\'").into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            "File name cannot contain '/' nor '\\'",
+        )
+            .into_response();
     }
 
-    let uri = Path::new(crate::FILES_STORAGE_DIRECTORY).join(uri);
+    let uri = Path::new(&app_state.directory).join(uri);
 
     match request.method().to_owned() {
         Method::GET => get_response(uri).await,
         Method::POST => post_response(uri, request.into_body()).await,
-        _ => (StatusCode::NOT_FOUND, "Only GET and POST methods are accepted").into_response(),
+        _ => {
+            (
+                StatusCode::NOT_FOUND,
+                "Only GET and POST methods are accepted",
+            )
+                .into_response()
+        }
     }
 }
 
