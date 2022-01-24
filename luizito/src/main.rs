@@ -1,8 +1,13 @@
 mod cli;
 mod commands;
+pub mod utils;
+
+use std::process;
 
 use cli::SubCommand;
-use std::process;
+
+const MAX_PARALLEL_REQUESTS: usize = 16;
+const SERVER_BASE_URL: &str = "127.0.0.1:8080";
 
 #[tokio::main]
 async fn main() {
