@@ -12,11 +12,11 @@ use crate::error::ResponseError;
 pub type Response = http::Response<Option<Bytes>>;
 
 pub trait IntoResponse {
-    fn into_responese(self) -> Response;
+    fn into_response(self) -> Response;
 }
 
 impl IntoResponse for StatusCode {
-    fn into_responese(self) -> Response {
+    fn into_response(self) -> Response {
         let mut response = http::Response::new(None);
         *response.status_mut() = self;
         response.headers_mut().insert(CONTENT_LENGTH, 0.into());
@@ -26,7 +26,7 @@ impl IntoResponse for StatusCode {
 }
 
 impl IntoResponse for Bytes {
-    fn into_responese(self) -> Response {
+    fn into_response(self) -> Response {
         let body_len = self.len();
         let mut response = http::Response::new(Some(self));
 
@@ -43,13 +43,13 @@ impl IntoResponse for Bytes {
 }
 
 impl IntoResponse for Vec<u8> {
-    fn into_responese(self) -> Response {
-        IntoResponse::into_responese(Bytes::from(self))
+    fn into_response(self) -> Response {
+        IntoResponse::into_response(Bytes::from(self))
     }
 }
 
 impl IntoResponse for &'static str {
-    fn into_responese(self) -> Response {
+    fn into_response(self) -> Response {
         let body_len = self.len();
         let mut response = http::Response::new(Some(Bytes::from(self)));
 
@@ -66,8 +66,8 @@ impl IntoResponse for &'static str {
 }
 
 impl<B: IntoResponse> IntoResponse for (StatusCode, B) {
-    fn into_responese(self) -> Response {
-        let mut response = self.1.into_responese();
+    fn into_response(self) -> Response {
+        let mut response = self.1.into_response();
         *response.status_mut() = self.0;
 
         response
