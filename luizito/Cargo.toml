@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bytes = "1.1.0"
 clap = { version = "3.0.10", features = ["derive", "env"] }
 futures = { version = "0.3.19", default-features = false, features = ["std"] }
 reqwest = "0.11.9"
-tokio = { version = "1.15.0", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1.15.0", features = ["rt-multi-thread", "macros", "fs"] }
