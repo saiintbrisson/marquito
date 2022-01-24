@@ -1,13 +1,13 @@
 use std::str::Utf8Error;
 
 #[derive(Debug, thiserror::Error)]
-pub enum SessionError {
-    #[error("failed to handle request {0}")]
+pub enum ResponseError {
+    #[error("failed to write response {0}")]
     IoError(#[from] std::io::Error),
-    #[error("invalid request {0}")]
-    InvalidRequest(http::Error),
-    #[error("invalid response {0}")]
-    InvalidResponse(http::Error),
+    #[error("failed to format response {0}")]
+    FmtError(#[from] std::fmt::Error),
+    #[error("failed to format response {0}")]
+    InvalidHeaderEncoding(#[from] http::header::ToStrError),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -22,10 +22,8 @@ pub enum RequestError {
     HttpError(#[from] http::Error),
     #[error("unsupported version")]
     UnsupportedVersion,
+    #[error("invalid header value encoding {0}")]
+    InvalidHeaderEncoding(#[from] http::header::ToStrError),
+    #[error("invalid content length value {0}")]
+    InvalidContentLength(#[from] std::num::ParseIntError),
 }
-
-// impl From<ToStrError> for RequestError {
-//     fn from(_: ToStrError) -> Self {
-//         Self::InvalidEncoding
-//     }
-// }
