@@ -23,7 +23,7 @@ marquito
 INFO marquito::server: server is running addr=127.0.0.1:23400
 ```
 
-`MARQUITO_ADDRESS` changes the server address (defaults to `127.0.0.1:23400`)
+`MARQUITO_ADDRESS` changes the server address (defaults to `127.0.0.1:23400`)  
 `MARQUITO_DIRECTORY` changes the storage directory (defaults to `./files/`)
 
 Now, with `luizito` installed, you can `send` and `get` files, here are some examples:
