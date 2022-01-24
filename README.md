@@ -2,7 +2,7 @@
 
 This project was conceived during TerraMagna's onboarding program.
 
-`marquito` is a simple, hand-written, file storage that runs over HTTP written in Rust to store files (we do **not** support HTTPS nor do we plan to do so). 
+`marquito` is a simple HTTP server written in Rust that works like a file storage (we do **not** support HTTPS nor do we plan to do so). 
 
 `luizito` is a CLI client tool that sends and consumes files to/from `marquito`.
 
